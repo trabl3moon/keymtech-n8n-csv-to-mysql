@@ -1,0 +1,39 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+html,body{margin:0;width:1400px;height:590px;font-family:"Segoe UI",Arial,sans-serif;background:#0f1d36;color:#e8eef8}
+.wrap{padding:36px 44px}
+h1{margin:0;font-size:38px;font-weight:600} .sub{color:#9fb4d4;font-size:19px;margin:6px 0 26px}
+.flow{display:flex;align-items:center;gap:7px;margin-bottom:28px}
+.n{background:#17305a;border:1px solid #2d5592;border-radius:10px;padding:11px 11px;font-size:15px;text-align:center;min-width:92px}
+.n b{display:block;color:#5cc8ff;font-size:12px;letter-spacing:1px;margin-bottom:3px}
+.a{color:#5cc8ff;font-size:22px}
+.row{display:flex;gap:26px;align-items:flex-start}
+.card{background:#fff;border-radius:12px;padding:10px}
+.card img{display:block;width:330px}
+.log{background:#0b1529;border:1px solid #2d5592;border-radius:12px;padding:16px 18px;font-family:Consolas,monospace;font-size:14.5px;line-height:1.65;flex:1;white-space:pre;color:#cfe0f5}
+.log .h{color:#5cc8ff} .tag{display:inline-block;margin-top:12px;font-family:"Segoe UI";font-size:14px;color:#9fb4d4}
+</style></head><body><div class="wrap">
+<h1>Reusable n8n workflow: CSV → MySQL</h1>
+<div class="sub">Web-form upload · column mapping without code · row validation · per-row DB error capture · downloadable error log</div>
+<div class="flow">
+ <div class="n"><b>FORM</b>CSV upload</div><span class="a">→</span>
+ <div class="n"><b>EXTRACT</b>Parse rows</div><span class="a">→</span>
+ <div class="n"><b>SETTINGS</b>Table + mapping</div><span class="a">→</span>
+ <div class="n"><b>VALIDATE</b>Types · required</div><span class="a">→</span>
+ <div class="n"><b>IF</b>Valid row?</div><span class="a">→</span>
+ <div class="n"><b>MYSQL</b>Insert each row</div><span class="a">→</span>
+ <div class="n"><b>REPORT</b>Summary + log</div><span class="a">→</span>
+ <div class="n"><b>FORM</b>Result + file</div>
+</div>
+<div class="row">
+ <div class="card"><img src="form.png"></div>
+ <div class="card"><img src="result.png"></div>
+ <div class="log"><span class="h">error_log.csv</span>  (real output, 8-row test file)
+line,stage,error
+3,validation,Full Name: required
+4,validation,Email: "not-an-email" is not a valid email
+5,validation,Signup Date: "2025-13-40" is not a valid date
+6,validation,Credit Limit: "abc" is not a valid number
+7,validation,Customer ID: "abc" is not a valid integer
+9,database,Duplicate entry '1001' for key 'customers.external_id'
+<span class="tag">Tested on n8n 2.45 + MySQL 8.4 (Docker) · Key M Tech</span></div>
+</div></div></body></html>

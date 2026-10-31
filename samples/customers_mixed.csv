@@ -1,0 +1,9 @@
+Customer ID,Full Name,Email,Signup Date,Credit Limit,Notes
+2001,Priya Nair,priya.nair@example.com,2025-05-01,15000,
+2002,,missing.name@example.com,2025-05-02,1000,no name -> skipped
+2003,Lucas Silva,not-an-email,2025-05-03,2000,bad email -> skipped
+2004,Grace Kim,grace.kim@example.com,2025-13-40,3000,bad date -> skipped
+2005,Tom Becker,tom.becker@example.com,2025-05-05,abc,bad number -> skipped
+abc,Nina Rossi,nina.rossi@example.com,2025-05-06,4000,bad id -> skipped
+2007,Ravi Shah,ravi.shah@example.com,2025-05-07,9000,
+1001,Asha Verma Duplicate,asha.dup@example.com,2025-05-08,100,duplicate id -> rejected by MySQL

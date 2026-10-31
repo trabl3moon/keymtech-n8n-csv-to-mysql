@@ -1,0 +1,7 @@
+line,stage,error
+3,validation,Full Name: required
+4,validation,"Email: ""not-an-email"" is not a valid email"
+5,validation,"Signup Date: ""2025-13-40"" is not a valid date"
+6,validation,"Credit Limit: ""abc"" is not a valid number"
+7,validation,"Customer ID: ""abc"" is not a valid integer"
+9,database,Duplicate entry '1001' for key 'customers.external_id'

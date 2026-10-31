@@ -1,0 +1,29 @@
+# Local test stack: MySQL 8 + n8n. `docker compose up -d`, then open http://localhost:5678
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: imports
+      MYSQL_USER: n8n
+      MYSQL_PASSWORD: n8npass
+    ports: ["3307:3306"]
+    volumes:
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]
+      interval: 5s
+      retries: 20
+
+  n8n:
+    image: n8nio/n8n:latest
+    ports: ["5678:5678"]
+    environment:
+      N8N_SECURE_COOKIE: "false"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      GENERIC_TIMEZONE: "Asia/Kolkata"
+    volumes:
+      - ./workflow:/workflow:ro
+    depends_on:
+      mysql:
+        condition: service_healthy

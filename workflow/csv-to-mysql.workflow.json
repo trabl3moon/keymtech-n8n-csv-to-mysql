@@ -1,0 +1,302 @@
+{
+  "name": "CSV → MySQL import (reusable)",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "CSV → MySQL import",
+        "formDescription": "Upload a CSV. Valid rows go into MySQL; invalid rows are skipped and listed in the error log you get back.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "csv",
+              "fieldType": "file",
+              "acceptFileTypes": ".csv",
+              "multipleFiles": false,
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "path": "csv-import"
+        }
+      },
+      "name": "CSV Upload Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "5d0c1a52-csv-import"
+    },
+    {
+      "parameters": {
+        "binaryPropertyName": "csv",
+        "options": {
+          "headerRow": true
+        }
+      },
+      "name": "Extract CSV",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"table\": \"customers\",\n  \"columnMap\": {\n    \"Customer ID\": \"external_id\",\n    \"Full Name\": \"name\",\n    \"Email\": \"email\",\n    \"Signup Date\": \"signup_date\",\n    \"Credit Limit\": \"credit_limit\"\n  },\n  \"required\": [\n    \"external_id\",\n    \"name\",\n    \"email\"\n  ],\n  \"types\": {\n    \"external_id\": \"integer\",\n    \"email\": \"email\",\n    \"signup_date\": \"date\",\n    \"credit_limit\": \"number\"\n  },\n  \"maxLength\": {\n    \"name\": 120,\n    \"email\": 190\n  },\n  \"dayFirst\": true\n}",
+        "options": {}
+      },
+      "name": "Settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        0
+      ],
+      "executeOnce": true,
+      "notes": "Edit this node to change the target table, CSV→column mapping, required fields and types."
+    },
+    {
+      "parameters": {
+        "jsCode": "// \"Validate & Map\" Code node (Run Once for All Items).\n// Reads the mapping from the Settings node and every row from Extract CSV.\n// Each output item is one CSV row: mapped DB fields + _line, _valid, _errors.\nconst s = $('Settings').first().json;\nconst rows = $('Extract CSV').all().map(i => i.json);\nconst map = s.columnMap || {};\nconst required = new Set(s.required || []);\nconst types = s.types || {};\nconst maxLength = s.maxLength || {};\n\nif (!rows.length) throw new Error('The CSV has no data rows.');\n\n// Fail fast if the CSV header doesn't contain a mapped column: that's a setup problem, not a bad row.\nconst header = Object.keys(rows[0]);\nconst missing = Object.keys(map).filter(c => !header.includes(c));\nif (missing.length) {\n  throw new Error(`CSV is missing mapped column(s): ${missing.join(', ')}. Found: ${header.join(', ')}. Update columnMap in the Settings node.`);\n}\n\nconst EMAIL = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n\nfunction toDate(v) {\n  let y, m, d;\n  let r = v.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})$/);\n  if (r) [, y, m, d] = r;\n  else if ((r = v.match(/^(\\d{1,2})[\\/.-](\\d{1,2})[\\/.-](\\d{4})$/))) {\n    // Day-first by default (DD/MM/YYYY); set \"dayFirst\": false in Settings for MM/DD/YYYY files.\n    [, d, m, y] = r;\n    if (s.dayFirst === false) [d, m] = [m, d];\n  } else return null;\n  const dt = new Date(Date.UTC(+y, +m - 1, +d));\n  if (dt.getUTCFullYear() !== +y || dt.getUTCMonth() !== +m - 1 || dt.getUTCDate() !== +d) return null;\n  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;\n}\n\nfunction convert(type, v) {\n  switch (type) {\n    case 'integer': return /^-?\\d+$/.test(v) ? parseInt(v, 10) : undefined;\n    case 'number': {\n      const n = v.replace(/,/g, '');\n      return /^-?\\d+(\\.\\d+)?$/.test(n) ? Number(n) : undefined;\n    }\n    case 'date': return toDate(v) ?? undefined;\n    case 'email': return EMAIL.test(v) ? v.toLowerCase() : undefined;\n    case 'boolean': {\n      const b = v.toLowerCase();\n      if (['true', 'yes', '1', 'y'].includes(b)) return 1;\n      if (['false', 'no', '0', 'n'].includes(b)) return 0;\n      return undefined;\n    }\n    default: return v;\n  }\n}\n\nreturn rows.map((row, i) => {\n  const out = {};\n  const errors = [];\n  for (const [csvCol, dbCol] of Object.entries(map)) {\n    const raw = row[csvCol] == null ? '' : String(row[csvCol]).trim();\n    if (raw === '') {\n      if (required.has(dbCol)) errors.push(`${csvCol}: required`);\n      out[dbCol] = null;\n      continue;\n    }\n    const value = convert(types[dbCol], raw);\n    if (value === undefined) {\n      errors.push(`${csvCol}: \"${raw}\" is not a valid ${types[dbCol]}`);\n      continue;\n    }\n    if (maxLength[dbCol] && String(value).length > maxLength[dbCol]) {\n      errors.push(`${csvCol}: longer than ${maxLength[dbCol]} characters`);\n      continue;\n    }\n    out[dbCol] = value;\n  }\n  return { json: { ...out, _line: i + 2, _valid: errors.length === 0, _errors: errors.join('; ') } };\n});\n"
+      },
+      "name": "Validate & Map",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json._valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Valid row?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(i => {\n  const { _line, _valid, _errors, ...row } = i.json;\n  return { json: row };\n});"
+      },
+      "name": "Drop helper fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "table": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Settings').first().json.table }}"
+        },
+        "dataMode": "autoMapInputData",
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "name": "Insert into MySQL",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        1320,
+        -100
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "credentials": {
+        "mySql": {
+          "id": "mysqlLocal",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1540,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// \"Build Report\" Code node (Run Once for All Items).\n// Collects rows skipped by validation plus rows MySQL rejected, and returns:\n//   json:   a summary (total / inserted / skipped)\n//   binary: error_log.csv (only the header line when nothing failed)\nconst all = $('Validate & Map').all().map(i => i.json);\nconst invalid = all.filter(r => !r._valid).map(r => ({ line: r._line, stage: 'validation', error: r._errors }));\n\n// Valid rows reach MySQL in order, one result item each. A rejected row comes back with an `error` field.\nconst valid = all.filter(r => r._valid);\nlet dbResults = [];\ntry { dbResults = $('Insert into MySQL').all().map(i => i.json); } catch (e) { /* no valid rows: MySQL never ran */ }\nconst rejected = [];\ndbResults.forEach((res, idx) => {\n  if (res && res.error) {\n    const src = valid[idx] || {};\n    const msg = typeof res.error === 'string' ? res.error : (res.error.message || JSON.stringify(res.error));\n    rejected.push({ line: src._line ?? '', stage: 'database', error: msg });\n  }\n});\n\nconst errors = [...invalid, ...rejected].sort((a, b) => a.line - b.line);\nconst inserted = valid.length - rejected.length;\n\nconst esc = v => {\n  const s = String(v ?? '');\n  return /[\",\\n]/.test(s) ? `\"${s.replace(/\"/g, '\"\"')}\"` : s;\n};\nconst csv = ['line,stage,error', ...errors.map(e => [e.line, e.stage, e.error].map(esc).join(','))].join('\\n') + '\\n';\n\nreturn [{\n  json: {\n    total_rows: all.length,\n    inserted,\n    skipped: errors.length,\n    table: $('Settings').first().json.table,\n    message: `${inserted} of ${all.length} rows imported into ${$('Settings').first().json.table}. ${errors.length} skipped.`,\n  },\n  binary: {\n    data: await this.helpers.prepareBinaryData(Buffer.from(csv, 'utf8'), 'error_log.csv', 'text/csv'),\n  },\n}];\n"
+      },
+      "name": "Build Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        0
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "returnBinary",
+        "completionTitle": "={{ $json.inserted }} of {{ $json.total_rows }} rows imported",
+        "completionMessage": "={{ $json.skipped }} row(s) skipped. The error log (error_log.csv) is downloading now.",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "name": "Show Result",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        1980,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "CSV Upload Form": {
+      "main": [
+        [
+          {
+            "node": "Extract CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract CSV": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "Validate & Map",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Map": {
+      "main": [
+        [
+          {
+            "node": "Valid row?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid row?": {
+      "main": [
+        [
+          {
+            "node": "Drop helper fields",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Drop helper fields": {
+      "main": [
+        [
+          {
+            "node": "Insert into MySQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert into MySQL": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Report": {
+      "main": [
+        [
+          {
+            "node": "Show Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "active": false,
+  "id": "csvToMysqlDemo01"
+}
